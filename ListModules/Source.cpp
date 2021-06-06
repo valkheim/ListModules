@@ -17,23 +17,27 @@ EXTERN_C_END
 #endif
 
 constexpr ULONG TAG = 'kedr';
-
 // Target RIP for the called procedure when SYSCALL is executed in 64-bit mode.
 constexpr auto IA32_LSTAR = 0xC0000082;
+constexpr auto SystemModuleInformation = 0xb;
 
 template <class T>
 auto GetRoutineAddress(_In_ PUNICODE_STRING routineName) -> T
 {
     __try {
-        T routineAddress = (T)MmGetSystemRoutineAddress(routineName);
+        T routineAddress = (T)MmGetSystemRoutineAddress( // Can only be used for routines exported by the kernil or HAL
+            routineName
+        );
         if (!routineAddress)
+        {
+            DbgPrint("Cannot get system routine '%wZ'", routineName);
             return nullptr;
+        }
 
         return routineAddress;
     }
     __except (1) {}
 }
-
 
 typedef NTSTATUS (*_ZwQuerySystemInformation)(ULONG SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength);
 NTSTATUS GetNtOsKrnlWithQuerySystemInformation(VOID)
@@ -43,11 +47,10 @@ NTSTATUS GetNtOsKrnlWithQuerySystemInformation(VOID)
 
         ULONG modulesSize = 0;
         PSYSTEM_MODULE_INFORMATION modules = nullptr;
-        auto SystemModuleInformation = 0xb;
         UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"ZwQuerySystemInformation"); // gone from win8 orly?
-
         // auto NtQuerySystemInformation = (_NtQuerySystemInformation)GetProcAddress(ntdll, "NtQuerySystemInformation");
         auto ZwQuerySystemInformation = GetRoutineAddress<_ZwQuerySystemInformation>(&routineName);
+        // Get the accurate size for the system module information
         status = ZwQuerySystemInformation(SystemModuleInformation, nullptr, 0, &modulesSize);
         if (status != STATUS_INFO_LENGTH_MISMATCH || modulesSize == 0)
         {
@@ -63,6 +66,7 @@ NTSTATUS GetNtOsKrnlWithQuerySystemInformation(VOID)
         }
 
         RtlZeroMemory(modules, modulesSize);
+        // Get the actual system modules information into `modules`
         status = ZwQuerySystemInformation(SystemModuleInformation, modules, modulesSize, nullptr);
         if (!NT_SUCCESS(status))
             goto Exit;
