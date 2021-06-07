@@ -89,6 +89,27 @@ NTSTATUS GetNtOsKrnlWithQuerySystemInformation(VOID)
     __except (1) {}
 }
 
+VOID DisplayExportDirectory(_In_ PVOID CONST ModuleBase)
+{
+    DbgPrint("ExportDirectory\n");
+    auto exportDirectory = AuxKlibGetImageExportDirectory(ModuleBase); // page fault in non paged area - win32k.sys - gotta maully parse the nt image headers?
+    if (exportDirectory == nullptr)
+    {
+        DbgPrint("No exports!\n");
+        return;
+    }
+
+    auto *functions = (ULONG *)(PtrToUlong(ModuleBase) + exportDirectory->AddressOfFunctions);
+    auto *names = (ULONG *)(PtrToUlong(ModuleBase) + exportDirectory->AddressOfNames);
+    auto *ordinals = (SHORT *)(PtrToUlong(ModuleBase) + exportDirectory->AddressOfNameOrdinals);
+    for (unsigned i = 0; i < exportDirectory->NumberOfNames; ++i)
+    {
+        ULONG ordinal = ordinals[i];
+        auto name = (char*)ModuleBase + names[i];
+        DbgPrint("  Ord: %d name: %s addr: 0x%x\n", ordinal, name, functions[ordinal]);
+    }
+}
+
 NTSTATUS GetNtOsKrnlWithAuxKlib(VOID)
 {
     ULONG modulesSize = 0;
@@ -127,15 +148,13 @@ NTSTATUS GetNtOsKrnlWithAuxKlib(VOID)
     for (ULONG i = 0; i < modulesSize / moduleSize; ++i)
     {
         auto module = modules[i];
-        DbgPrint("0x%02x: %s\n", i, module.FullPathName + module.FileNameOffset);
+        auto name = module.FullPathName + module.FileNameOffset;
+        DbgPrint("0x%02x: %s\n", i, name);
         DbgPrint("  Path: %s\n", module.FullPathName);
         DbgPrint("  Base: %p\n", module.BasicInfo.ImageBase);
         DbgPrint("  Size: 0x%x\n", module.ImageSize);
-        /*
-        auto exportDirectory = AuxKlibGetImageExportDirectory(module.BasicInfo.ImageBase);
-        if (exportDirectory == nullptr)
-            continue;
-        */
+
+        //DisplayExportDirectory(module.BasicInfo.ImageBase);
     }
 
 Exit:
@@ -202,7 +221,7 @@ PVOID GetNtOsKrnlWithMsr(VOID)
         auto addr = *(USHORT *)(page);
         if (addr == IMAGE_DOS_SIGNATURE) // M Z header
         {
-            for (auto i = page; i < page + PTE_ENTRY_COUNT_32; i += 8) {
+            for (auto i = page; i < page + PTE_ENTRY_COUNT_32; i += 8) { // 0x400
                 if (*reinterpret_cast<ULONG64*>(i) == PAGELK) // find PAGELK section
                     return reinterpret_cast<PVOID>(page);
             }
@@ -225,12 +244,12 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, PUNICODE_STRING)
 
     DbgPrint("* GetNtOsKrnlWithAuxLib\n");
     GetNtOsKrnlWithAuxKlib();
-    DbgPrint("* GetNtOsKrnlWithQuerySystemInformation\n");
-    GetNtOsKrnlWithQuerySystemInformation();
-    DbgPrint("* GetNtOsKrnlWithPC\n");
-    GetNtOsKrnlWithPC();
-    DbgPrint("* GetNtOsKrnlWithPC2\n");
-    GetNtOsKrnlWithPC2();
+    //DbgPrint("* GetNtOsKrnlWithQuerySystemInformation\n");
+    //GetNtOsKrnlWithQuerySystemInformation();
+    //DbgPrint("* GetNtOsKrnlWithPC\n");
+    //GetNtOsKrnlWithPC();
+    //DbgPrint("* GetNtOsKrnlWithPC2\n");
+    //GetNtOsKrnlWithPC2();
 
     DriverObject->DriverUnload = Unload;
     return STATUS_SUCCESS;
