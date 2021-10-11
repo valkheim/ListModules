@@ -7,6 +7,8 @@
 // https://github.com/vxcute/WindowsInternals/blob/main/Misc/Snippets/KernelMode/KmGetNtosImageBase.cpp
 // https://m0uk4.gitbook.io/notebooks/mouka/windowsinternal/find-kernel-module-address-todo
 
+// EnumDeviceDrivers
+
 EXTERN_C_START
 DRIVER_INITIALIZE DriverEntry;
 NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING RegistryPath);
